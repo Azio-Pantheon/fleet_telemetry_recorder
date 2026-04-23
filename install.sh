@@ -20,9 +20,21 @@ UNIT_DEST="/etc/systemd/system/${UNIT_NAME}"
 echo "[install] creating venv at ${VENV}"
 python3 -m venv "${VENV}"
 "${VENV}/bin/pip" install --upgrade pip
-# --force-reinstall so re-running this script always picks up local changes,
-# even when the version string hasn't bumped.
-"${VENV}/bin/pip" install --force-reinstall "${SRC_DIR}"
+# --force-reinstall + --no-cache-dir so re-running this script always picks
+# up local changes, even when the version string hasn't bumped.
+"${VENV}/bin/pip" install --force-reinstall --no-cache-dir "${SRC_DIR}"
+
+# Sanity check — catch the empty-package-install failure mode immediately
+# rather than letting systemd fail in a loop with ModuleNotFoundError.
+if ! "${VENV}/bin/python" -c "import fleet_telemetry_recorder" 2>/dev/null; then
+    echo "[install] FATAL: the fleet_telemetry_recorder module is not importable"
+    echo "[install]        after install. This usually means the pyproject.toml"
+    echo "[install]        on this host is stale (missing the explicit"
+    echo "[install]        [tool.setuptools] packages = [...] directive)."
+    echo "[install]        Pull the latest source and re-run this script."
+    exit 1
+fi
+echo "[install] sanity check: fleet_telemetry_recorder importable inside venv ✓"
 
 echo "[install] writing ${UNIT_DEST}"
 sed -e "s|{USER}|${USER_NAME}|g" -e "s|{VENV}|${VENV}|g" "${UNIT_SRC}" \
