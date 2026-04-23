@@ -1,0 +1,23 @@
+[Unit]
+Description=Fleet Telemetry Recorder (per-print Klipper telemetry logger)
+After=klipper.service moonraker.service
+Wants=klipper.service
+
+[Service]
+Type=simple
+# Replace {USER} and {VENV} via install.sh — see README.md
+User={USER}
+WorkingDirectory=/home/{USER}
+ExecStart={VENV}/bin/fleet-telemetry-recorder
+Restart=always
+RestartSec=5
+
+# Log to journald; fleet_daemon reads only the produced files.
+StandardOutput=journal
+StandardError=journal
+
+# Nice the process so it never competes with klippy for real-time cycles.
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
