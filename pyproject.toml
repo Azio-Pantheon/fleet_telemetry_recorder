@@ -14,5 +14,5 @@ dependencies = [
 [project.scripts]
 fleet-telemetry-recorder = "fleet_telemetry_recorder.__main__:main"
 
-[tool.setuptools.packages.find]
-include = ["fleet_telemetry_recorder*"]
+[tool.setuptools]
+packages = ["fleet_telemetry_recorder"]

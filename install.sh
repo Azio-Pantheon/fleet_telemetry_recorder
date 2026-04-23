@@ -20,7 +20,9 @@ UNIT_DEST="/etc/systemd/system/${UNIT_NAME}"
 echo "[install] creating venv at ${VENV}"
 python3 -m venv "${VENV}"
 "${VENV}/bin/pip" install --upgrade pip
-"${VENV}/bin/pip" install "${SRC_DIR}"
+# --force-reinstall so re-running this script always picks up local changes,
+# even when the version string hasn't bumped.
+"${VENV}/bin/pip" install --force-reinstall "${SRC_DIR}"
 
 echo "[install] writing ${UNIT_DEST}"
 sed -e "s|{USER}|${USER_NAME}|g" -e "s|{VENV}|${VENV}|g" "${UNIT_SRC}" \

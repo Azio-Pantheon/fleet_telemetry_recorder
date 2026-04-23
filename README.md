@@ -46,6 +46,7 @@ On each printer's Pi (tested with Klipper + Moonraker on Raspberry Pi OS):
 ```bash
 git clone <this_repo>             # or rsync the fleet_telemetry_recorder/ dir
 cd fleet_telemetry_recorder
+chmod +x install.sh
 ./install.sh
 ```
 
