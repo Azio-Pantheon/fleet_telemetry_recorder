@@ -170,6 +170,34 @@ class Recorder:
         """One connection lifetime against Klippy."""
         await self.sock.connect()
 
+        # Start the reader task FIRST. Queries block on futures that only
+        # get resolved once _handle_message runs, so the reader loop must be
+        # pumping from the moment we send the first query.
+        reader_task = asyncio.create_task(self._reader_loop(), name="ftr.reader")
+        try:
+            await self._handshake_and_subscribe()
+            # Main phase — just wait on the reader. It returns when the
+            # socket closes (Klipper restart, service stop).
+            await reader_task
+            log.warning("[main] klippy socket closed")
+        finally:
+            if not reader_task.done():
+                reader_task.cancel()
+                try:
+                    await reader_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    async def _reader_loop(self) -> None:
+        async for msg in self.sock.messages():
+            try:
+                await self._handle_message(msg)
+            except Exception as e:
+                log.warning(f"[reader] handler error: {e}")
+
+    async def _handshake_and_subscribe(self) -> None:
+        """Send info/objects.list/subscribe queries. Responses are routed
+        to _handle_message by the concurrent reader loop."""
         # Wait for Klippy "ready". `info` returns state=startup/ready/error/shutdown.
         while True:
             info = await self._query("info", {"client_info": {
@@ -202,12 +230,6 @@ class Recorder:
         await self._subscribe(
             "status", "objects/subscribe", {"objects": subscribe_set}
         )
-
-        # Drain messages; the handler will fulfil status_resp_fut on first reply.
-        async for msg in self.sock.messages():
-            await self._handle_message(msg)
-
-        log.warning("[main] klippy socket closed")
 
     async def _handle_message(self, msg: dict) -> None:
         q_tag = msg.get("q")
