@@ -397,10 +397,11 @@ class Recorder:
     ) -> Optional[str]:
         """Poll Moonraker's history for the just-ended job and return its id.
 
-        Moonraker writes history on print end; give it a few seconds of
+        Moonraker writes history on print end; give it up to ~30s of
         retries to handle order-of-events jitter."""
         url = config.MOONRAKER_URL.rstrip("/") + "/server/history/list"
-        for attempt in range(10):
+        last_seen: list = []
+        for attempt in range(15):
             try:
                 timeout = aiohttp.ClientTimeout(total=5)
                 async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -412,6 +413,7 @@ class Recorder:
                             continue
                         data = await resp.json()
                         jobs = (data.get("result") or {}).get("jobs") or []
+                        last_seen = jobs
                         best = self._pick_job(jobs, filename, started_at)
                         if best:
                             jid = str(best.get("job_id") or "")
@@ -424,20 +426,36 @@ class Recorder:
             except Exception as e:
                 log.debug(f"[finalize] history fetch error: {e}")
             await asyncio.sleep(2.0)
+        # Leave a diagnostic breadcrumb so the operator can see what the
+        # matcher actually compared against.
+        try:
+            summary = ", ".join(
+                f"{j.get('job_id')}:{j.get('filename')}"
+                f"@{j.get('start_time')}" for j in last_seen[:5]
+            )
+        except Exception:
+            summary = "<unavailable>"
         log.warning(
-            f"[finalize] could not resolve job_id for {filename} — file will be "
-            "named 'unresolved__...' and flagged by fleet_daemon after grace"
+            f"[finalize] could not resolve job_id for filename={filename!r} "
+            f"started_at={started_at:.0f}; last history sample: [{summary}]. "
+            "File will be named 'unresolved__...' — you can manually rename it "
+            "to '<job_id>__<stub>.jsonl.gz' if you know which job it belongs to."
         )
         return None
 
     def _pick_job(
         self, jobs: list, filename: Optional[str], started_at: float
     ) -> Optional[dict]:
-        """Pick the job that matches our filename with the closest start_time."""
+        """Pick the job that matches our filename with the closest start_time.
+
+        Moonraker's history filename may include a directory prefix
+        (e.g. 'subdir/foo.gcode') while print_stats.filename is typically
+        the basename — compare by basename to survive that."""
+        want = self._basename(filename) if filename else None
         best = None
         best_delta = 1e9
         for j in jobs:
-            if filename and j.get("filename") != filename:
+            if want and self._basename(j.get("filename")) != want:
                 continue
             jst = j.get("start_time") or 0
             delta = abs(jst - started_at)
@@ -446,6 +464,12 @@ class Recorder:
                 best = j
                 best_delta = delta
         return best
+
+    @staticmethod
+    def _basename(path: Optional[str]) -> Optional[str]:
+        if not path:
+            return None
+        return path.rsplit("/", 1)[-1]
 
     # ------------------------------------------------------------------
     # Housekeeping
