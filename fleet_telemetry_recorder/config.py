@@ -57,3 +57,9 @@ BASELINE_OBJECT_PREFIXES = [
 
 # How often to prune old files (seconds).
 PRUNE_INTERVAL_SECS = 24 * 3600
+
+# Small cleanup-HTTP server: fleet_daemon POSTs DELETE here after a file is
+# safely on NAS, so local copies are purged promptly (instead of waiting for
+# the 60-day prune). Set FTR_CLEANUP_PORT=0 to disable.
+CLEANUP_HOST = _env("FTR_CLEANUP_HOST", "0.0.0.0")
+CLEANUP_PORT = int(_env("FTR_CLEANUP_PORT", "7130"))

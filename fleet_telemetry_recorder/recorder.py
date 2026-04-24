@@ -25,6 +25,7 @@ from typing import Any, Optional
 import aiohttp
 
 from . import config
+from .cleanup_server import start_server as start_cleanup_server
 from .writer import PrintLogWriter
 
 log = logging.getLogger("fleet_telemetry_recorder")
@@ -147,6 +148,14 @@ class Recorder:
 
         # Prune loop runs independently of the socket lifecycle.
         asyncio.create_task(self._prune_loop(), name="ftr.prune")
+
+        # Cleanup HTTP server — fleet_daemon POSTs DELETEs here after
+        # successful NAS archive. Failure to start the server shouldn't take
+        # the recorder down; log and move on.
+        try:
+            await start_cleanup_server()
+        except Exception as e:   # noqa: BLE001
+            log.warning(f"[main] cleanup server failed to start: {e}")
 
         # Reconnect-forever outer loop. Klipper restarts are routine
         # (firmware flash, config reload) and our service must follow.
